@@ -12,16 +12,16 @@ router.post("/login", async (req, res) => {
     try {
         const { error } = validateLogin(req.body);
         if (error)
-            return res.status(400).send({ message: error.details[0].message })
+            return res.status(400).send({ message: "Blad walidacji loginu" })
         const user = await User.findOne({ email: req.body.email })
         if (!user)
-            return res.status(401).send({ message: "Invalid Email or Password" })
+            return res.status(401).send({ message: "Niepoprawne haslo lub mail" })
         const validPassword = await bcrypt.compare(
             req.body.password,
             user.password
         )
         if (!validPassword)
-            return res.status(401).send({ message: "Invalid Email or Password" })
+            return res.status(401).send({ message: "Niepoprawne haslo lub mail" })
         const token = user.generateAuthToken();
         res.cookie('token', token, {
             httpOnly: true,
@@ -35,25 +35,26 @@ router.post("/login", async (req, res) => {
             username:user.firstName
             });
     } catch (error) {
-        res.status(500).send({ message: "Internal Server Error" })
+        res.status(500).send({ message: "Blad serwera" })
     }
 })
 router.post("/register", async (req, res) => {
     try {
+        console.log(req.body);
         const { error } = validateRegister(req.body)
         if (error)
-            return res.status(400).send({ message: error.details[0].message })
+            return res.status(400).send({ message: "Blad walidacji rejestracji" })
         const user = await User.findOne({ email: req.body.email })
         if (user)
             return res
                 .status(409)
-                .send({ message: "User with given email already Exist!" })
+                .send({ message: "Uzytkownik z podanym mailem już istnieje" })
         const salt = await bcrypt.genSalt(Number(process.env.SALT))
         const hashPassword = await bcrypt.hash(req.body.password, salt)
         await new User({ ...req.body, password: hashPassword }).save()
-        res.status(201).send({ message: "User created successfully" })
+        res.status(201).send({ message: "Uzytkownik pomyslnie utworzony" })
     } catch (error) {
-        res.status(500).send({ message: "Internal Server Error" })
+        res.status(500).send({ message: "Blad serwera" })
     }
 })
 
