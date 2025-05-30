@@ -26,6 +26,59 @@ const storageRestaurant = multer.diskStorage({
     }
 });
 const uploadRestaurant = multer({ storage: storageRestaurant });
+
+router.delete("/review/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(req.params);
+        const result = await Review.deleteOne({ _id: id });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: "Recenzja nie została znaleziona." });
+        }
+
+        res.status(200).json({ message: "Udało się usunąć recenzję." });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: "Nie udało się usunąć recenzji." });
+    }
+});
+router.put("/review",uploadReview.any(), async (req, res) => {
+    try {
+        console.log(req.body);
+        const { restaurantName, review, rating, dishes } = req.body;
+        const imagesUrl = [];
+
+        const token = req.cookies.token;
+        const decoded = jwt.verify(token, jwtSecret);
+
+        const user = await User.findOne({ _id: decoded._id }, { _id: 1 });
+        const restaurant = await Restaurant.findOne({ name: restaurantName }, { _id: 1 });
+
+        if (req.files && req.files.length > 0) {
+            req.files.forEach(file => {
+                imagesUrl.push(file.filename);
+            });
+        }
+
+        const updateData = {
+            user: user._id,
+            restaurant: restaurant._id,
+            review: review,
+            dishes: dishes,
+            images: imagesUrl,
+            rating: rating
+        };
+        console.log(updateData)
+        await Review.updateOne({ user: user._id }, { $set: updateData });
+
+        res.status(200).json({ message: "Zaaktualizowano recenzję" });
+    } catch (e) {
+        res.status(500).json({ message: "Nie udało się edytować recenzji" });
+    }
+});
+
+
 router.post("/review", uploadReview.any(), async (req, res) => {
     try{
         const {restaurantName, review, rating, dishes} = req.body;
@@ -40,13 +93,6 @@ router.post("/review", uploadReview.any(), async (req, res) => {
         req.files.forEach(file => {
             imagesUrl.push(file.filename);
         });
-        console.log(userID[0]._id)
-        console.log(restaurantID[0]._id)
-        console.log(restaurantName)
-        console.log(review)
-        console.log(rating)
-        console.log(dishes)
-        console.log(imagesUrl);
         const newReview = new Review({
             user: userID[0]._id,
             restaurant: restaurantID[0]._id,
@@ -68,9 +114,26 @@ router.get("/review",async (req,res)=>{
     try{
         const token = req.cookies.token;
         const decodedID = jwt.verify(token,jwtSecret)._id;
-        const userID = await User.find({_id:decodedID});
-        const reviews = await Review.find({user:userID[0]._id});
-        res.status(200).json({data: reviews});
+        const user = await User.findOne({_id:decodedID});
+        const reviews = await Review.find({user:user._id});
+        console.log(reviews);
+        const resp = await Promise.all(
+            reviews.map(async (x) => {
+                const restaurant = await Restaurant.findOne({_id: x.restaurant});
+                return {
+                    user: user.firstName,
+                    restaurant: restaurant.name,
+                    review: x.review,
+                    dishes: x.dishes,
+                    images: x.images,
+                    rating: x.rating,
+                    date: x.date,
+                    id: x._id
+                };
+            })
+        );
+        res.status(200).json({ data: resp });
+
     }
     catch(e){
         console.log(e)
@@ -122,7 +185,23 @@ router.get("/restaurantReview/:id", async (req, res) => {
     try {
         const restaurantId = req.params.id;
         const reviews = await Review.find({ restaurant: restaurantId });
-        res.status(200).json({ reviews });
+        const restaurant = await Restaurant.findOne({_id: restaurantId});
+        const resp = await Promise.all(
+            reviews.map(async (x) => {
+                const user = await User.findOne({ _id: x.user });
+                return {
+                    user: user.firstName,
+                    restaurant: restaurant.name,
+                    review: x.review,
+                    dishes: x.dishes,
+                    images: x.images,
+                    rating: x.rating,
+                    date: x.date,
+                    id: x._id
+                };
+            })
+        );
+        res.status(200).json({ data: resp });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
