@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const authRouter = require('./routes/auth');
 const apiRouter = require('./routes/api');
-const connection = require('./db');
+const connection = require('./database/db');
 connection();
 app.use('/auth', authRouter);
 app.use('/api',apiRouter);

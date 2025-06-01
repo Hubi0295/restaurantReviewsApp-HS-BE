@@ -175,12 +175,27 @@ router.post("/restaurant", uploadRestaurant.single("image"), async (req, res) =>
 
 router.get("/restaurants", async (req, res) => {
     try {
-        const restaurants = await Restaurant.find({});
+        const { name, type, hasDelivery } = req.query;
+        const filter = {};
+
+        if (name) {
+            filter.name = { $regex: new RegExp(name, "i") }; // case-insensitive
+        }
+        if (type) {
+            filter.type = { $regex: new RegExp(type, "i") };
+        }
+        if (hasDelivery === "true" || hasDelivery === "false") {
+            filter.hasDelivery = hasDelivery === "true";
+        }
+
+        const restaurants = await Restaurant.find(filter);
         res.status(200).json({ restaurants });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
     }
 });
+
 router.get("/restaurantReview/:id", async (req, res) => {
     try {
         const restaurantId = req.params.id;
@@ -207,5 +222,40 @@ router.get("/restaurantReview/:id", async (req, res) => {
         res.status(500).json({ message: "Błąd serwera" });
     }
 });
+router.get("/reviewsForChart", async (req, res) => {
+    try {
+        const restaurantId = req.query.id;
+        const my = req.query.my;
+        let response = [];
+        let reviews = [];
+        if(restaurantId === "none"){
+            if(my === "false"){
+                reviews = await Review.find({},{rating:1, _id:0, restaurant:1});//wszystkie recenzje wszystkich restauracji dla Home
+            }
+            else{ //moje recenzja wszystkich resturacji dla myReview
+                const token = req.cookies.token;
+                const decodedID = jwt.verify(token,jwtSecret)._id;
+                const user = await User.findOne({_id:decodedID});
+                reviews = await Review.find({user:user._id},{rating:1, restaurant:1, _id:0});
+            }
+            response = await Promise.all(
+                reviews.map(async (x) => {
+                    const restaurant = await Restaurant.findOne({ _id: x.restaurant });
+                    return {
+                        restaurant: restaurant.name,
+                        rating: x.rating,
+                    };
+                })
+            );
 
+        }
+        else{
+            response = await Review.find({ restaurant: restaurantId },{rating:1, _id:0});//Recenzje konkretnej restauracji dla restaurantReview
+        }
+        res.status(200).json({message: response})
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Błąd serwera" });
+    }
+});
 module.exports = router;
