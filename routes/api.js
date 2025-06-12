@@ -1,4 +1,5 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const router = express.Router();
@@ -43,7 +44,14 @@ router.delete("/review/:id", async (req, res) => {
         res.status(500).json({ message: "Nie udało się usunąć recenzji." });
     }
 });
-router.put("/review",uploadReview.any(), async (req, res) => {
+router.put("/review",uploadReview.any(),
+    [
+        body("restaurantName").isString().notEmpty().withMessage("Nazwa restauracji jest wymagana."),
+        body("review").isString().notEmpty().withMessage("Treść recenzji jest wymagana."),
+        body("rating").isFloat({ min: 1, max: 10 }).withMessage("Ocena musi być liczbą od 1 do 10."),
+        body("dishes").isArray({ min: 1 }).withMessage("Wymagana jest lista dań."),
+    ],
+    async (req, res) => {
     try {
         console.log(req.body);
         const { restaurantName, review, rating, dishes } = req.body;
@@ -79,7 +87,14 @@ router.put("/review",uploadReview.any(), async (req, res) => {
 });
 
 
-router.post("/review", uploadReview.any(), async (req, res) => {
+router.post("/review", uploadReview.any(),
+    [
+        body("restaurantName").isString().notEmpty().withMessage("Nazwa restauracji jest wymagana."),
+        body("review").isString().notEmpty().withMessage("Treść recenzji jest wymagana."),
+        body("rating").isFloat({ min: 1, max: 10 }).withMessage("Ocena musi być liczbą od 1 do 10."),
+        body("dishes").isArray({ min: 1 }).withMessage("Wymagana jest lista dań."),
+    ],
+    async (req, res) => {
     try{
         const {restaurantName, review, rating, dishes} = req.body;
         const imagesUrl = [];
@@ -152,7 +167,15 @@ router.get("/listRestaurant",async (req,res)=>{
     }
 })
 
-router.post("/restaurant", uploadRestaurant.single("image"), async (req, res) => {
+router.post("/restaurant", uploadRestaurant.single("image"),
+    [
+        body("name").isString().notEmpty().withMessage("Nazwa jest wymagana."),
+        body("address").isString().notEmpty().withMessage("Adres jest wymagany."),
+        body("description").isString().notEmpty().withMessage("Opis jest wymagany."),
+        body("type").isString().notEmpty().withMessage("Typ kuchni jest wymagany."),
+        body("hasDelivery").isBoolean().withMessage("Pole hasDelivery musi być typu boolean."),
+    ],
+    async (req, res) => {
     try {
         const { name, address, description, type, hasDelivery } = req.body;
         const imagePath = req.file ? req.file.filename : null;
