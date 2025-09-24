@@ -25,9 +25,9 @@ router.post("/login", async (req, res) => {
         const token = user.generateAuthToken();
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,
-            sameSite: 'lax',
-            maxAge: 3600000,
+            secure: true,
+            sameSite: 'none',
+            maxAge: 86400000,
         });
 
         res.json({
