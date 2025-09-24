@@ -35,6 +35,7 @@ router.post("/login", async (req, res) => {
             username:user.firstName
             });
     } catch (error) {
+        console.error(error);
         res.status(500).send({ message: "Blad serwera" })
     }
 })
