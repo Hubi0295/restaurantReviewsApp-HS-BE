@@ -25,7 +25,7 @@ router.post("/login", async (req, res) => {
         const token = user.generateAuthToken();
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,
+            secure: true,
             sameSite: 'none',
             maxAge: 86400000,
         });
@@ -62,7 +62,7 @@ router.post("/register", async (req, res) => {
 router.post('/logout',(req,res)=>{
     res.clearCookie('token', {
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: 'none',
     });
     res.json({ message: 'Wylogowano' });
 })
