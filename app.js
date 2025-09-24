@@ -23,4 +23,7 @@ const connection = require('./database/db');
 connection();
 app.use('/auth', authRouter);
 app.use('/api',apiRouter);
+console.log("Express version:", require("express/package.json").version);
+console.log("Cookie-parser version:", require("cookie-parser/package.json").version);
+console.log("jsonwebtoken version:", require("jsonwebtoken/package.json").version);
 module.exports = app;
