@@ -62,7 +62,9 @@ router.post("/register", async (req, res) => {
 router.post('/logout',(req,res)=>{
     res.clearCookie('token', {
         httpOnly: true,
+        secure: true,
         sameSite: 'none',
+        path: '/', 
     });
     res.json({ message: 'Wylogowano' });
 })
