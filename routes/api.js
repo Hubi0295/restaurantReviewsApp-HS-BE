@@ -9,42 +9,42 @@ const { User } = require("../models/User");
 const jwtSecret = process.env.JWT_SECRET;
 const multer = require("multer");
 const path = require('path');
-const storageReview = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/reviews/");
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const uploadReview = multer({ storage: storageReview });
-const storageRestaurant = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/restaurants/");
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const uploadRestaurant = multer({ storage: storageRestaurant });
+const { createClient } = require("@supabase/supabase-js");
+const {v4: uuidv4} = require("uuid");
+const upload = multer({ storage: multer.memoryStorage() });
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+
 
 router.delete("/review/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(req.params);
-        const result = await Review.deleteOne({ _id: id });
+        const findRev = await Review.findOne({_id:id});
+        const fileNames = findRev.images.map(url => url.split('/').pop());
+        const { data, error } = await supabase.storage
+        .from("pictures")
+        .remove(fileNames);
+        console.log(error);
+        console.log(fileNames);
 
+        if (error) {
+            return res.status(404).json({ message: "Recenzja nie została znaleziona." });
+        } else {
+        }
+
+        const result = await Review.deleteOne({ _id: id });
         if (result.deletedCount === 0) {
             return res.status(404).json({ message: "Recenzja nie została znaleziona." });
         }
-
         res.status(200).json({ message: "Udało się usunąć recenzję." });
     } catch (e) {
-        console.error(e);
         res.status(500).json({ message: "Nie udało się usunąć recenzji." });
     }
 });
-router.put("/review",uploadReview.any(),
+router.put("/review",upload.array("images"),
     [
         body("restaurantName").isString().notEmpty().withMessage("Nazwa restauracji jest wymagana."),
         body("review").isString().notEmpty().withMessage("Treść recenzji jest wymagana."),
@@ -53,8 +53,11 @@ router.put("/review",uploadReview.any(),
     ],
     async (req, res) => {
     try {
-        console.log(req.body);
-        const { restaurantName, review, rating, dishes } = req.body;
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+        }
+        const { restaurantName, review, rating, dishes, reviewId } = req.body;
         const imagesUrl = [];
 
         const token = req.cookies.token;
@@ -63,10 +66,28 @@ router.put("/review",uploadReview.any(),
         const user = await User.findOne({ _id: decoded._id }, { _id: 1 });
         const restaurant = await Restaurant.findOne({ name: restaurantName }, { _id: 1 });
 
-        if (req.files && req.files.length > 0) {
-            req.files.forEach(file => {
-                imagesUrl.push(file.filename);
+        const findRev = await Review.findOne({_id:reviewId});
+        const fileNames = findRev.images.map(url => url.split('/').pop());
+        const { data, error } = await supabase.storage
+        .from("pictures")
+        .remove(fileNames);
+        console.log(error);
+        console.log(fileNames);
+
+        for (const file of req.files) {
+            const fileName = `${uuidv4()}-${file.originalname}`;
+            const { error } = await supabase.storage
+            .from("pictures")
+            .upload(fileName, file.buffer, {
+            contentType: file.mimetype,
             });
+            if (error) throw error;
+
+            const { data } = supabase.storage
+            .from("pictures")
+            .getPublicUrl(fileName);
+
+            imagesUrl.push(data.publicUrl);
         }
 
         const updateData = {
@@ -77,8 +98,7 @@ router.put("/review",uploadReview.any(),
             images: imagesUrl,
             rating: rating
         };
-        console.log(updateData)
-        await Review.updateOne({ user: user._id }, { $set: updateData });
+        await Review.updateOne({ _id: reviewId }, { $set: updateData });
 
         res.status(200).json({ message: "Zaaktualizowano recenzję" });
     } catch (e) {
@@ -87,7 +107,7 @@ router.put("/review",uploadReview.any(),
 });
 
 
-router.post("/review", uploadReview.any(),
+router.post("/review", upload.array("images"),
     [
         body("restaurantName").isString().notEmpty().withMessage("Nazwa restauracji jest wymagana."),
         body("review").isString().notEmpty().withMessage("Treść recenzji jest wymagana."),
@@ -96,7 +116,11 @@ router.post("/review", uploadReview.any(),
     ],
     async (req, res) => {
     try{
-        const {restaurantName, review, rating, dishes} = req.body;
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+        }
+        const { restaurantName, review, rating, dishes  } = req.body;
         const imagesUrl = [];
 
         const token = req.cookies.token;
@@ -105,9 +129,22 @@ router.post("/review", uploadReview.any(),
         const restaurantID = await Restaurant.find({name: req.body.restaurantName},{_id:1});
 
 
-        req.files.forEach(file => {
-            imagesUrl.push(file.filename);
-        });
+        for (const file of req.files) {
+            const fileName = `${uuidv4()}-${file.originalname}`;
+            const { error } = await supabase.storage
+            .from("pictures")
+            .upload(fileName, file.buffer, {
+            contentType: file.mimetype,
+            });
+            if (error) throw error;
+
+            const { data } = supabase.storage
+            .from("pictures")
+            .getPublicUrl(fileName);
+
+            imagesUrl.push(data.publicUrl);
+        }
+
         const newReview = new Review({
             user: userID[0]._id,
             restaurant: restaurantID[0]._id,
@@ -121,7 +158,6 @@ router.post("/review", uploadReview.any(),
             res.status(201).json({message:"Dodano recenzje"});
         }
     catch(e){
-        console.log(e);
         res.status(500).json({message:"Blad dodawania recenzji"});
     }
 });
@@ -131,7 +167,6 @@ router.get("/review",async (req,res)=>{
         const decodedID = jwt.verify(token,jwtSecret)._id;
         const user = await User.findOne({_id:decodedID});
         const reviews = await Review.find({user:user._id});
-        console.log(reviews);
         const resp = await Promise.all(
             reviews.map(async (x) => {
                 const restaurant = await Restaurant.findOne({_id: x.restaurant});
@@ -151,7 +186,6 @@ router.get("/review",async (req,res)=>{
 
     }
     catch(e){
-        console.log(e)
         res.status(500).json({message:"Blad serwera"});
     }
 
@@ -162,39 +196,54 @@ router.get("/listRestaurant",async (req,res)=>{
         const restaurants = await Restaurant.find({},{name:1,_id:0});
         res.status(200).json({ restaurants });
     } catch (err) {
-        console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
     }
 })
 
-router.post("/restaurant", uploadRestaurant.single("image"),
-    [
-        body("name").isString().notEmpty().withMessage("Nazwa jest wymagana."),
-        body("address").isString().notEmpty().withMessage("Adres jest wymagany."),
-        body("description").isString().notEmpty().withMessage("Opis jest wymagany."),
-        body("type").isString().notEmpty().withMessage("Typ kuchni jest wymagany."),
-        body("hasDelivery").isBoolean().withMessage("Pole hasDelivery musi być typu boolean."),
-    ],
-    async (req, res) => {
+router.post("/restaurant", upload.single("image"),
+  [
+    body("name").isString().notEmpty().withMessage("Nazwa jest wymagana."),
+    body("address").isString().notEmpty().withMessage("Adres jest wymagany."),
+    body("description").isString().notEmpty().withMessage("Opis jest wymagany."),
+    body("type").isString().notEmpty().withMessage("Typ kuchni jest wymagany."),
+    body("hasDelivery").isBoolean().withMessage("Pole hasDelivery musi być typu boolean."),
+  ],
+  async (req, res) => {
     try {
-        const { name, address, description, type, hasDelivery } = req.body;
-        const imagePath = req.file ? req.file.filename : null;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-        const newRestaurant = new Restaurant({
-            name,
-            address,
-            description,
-            type,
-            hasDelivery: hasDelivery === "true",
-            image: imagePath,
+      const { name, address, description, type, hasDelivery } = req.body;
+
+      if (!req.file) return res.status(400).json({ message: "Brak przesłanego pliku" });
+
+      const fileName = `${uuidv4()}-${req.file.originalname}`;
+      const { error } = await supabase.storage
+        .from("pictures")
+        .upload(fileName, req.file.buffer, {
+          contentType: req.file.mimetype,
         });
-        await newRestaurant.save();
-        res.status(201).json({ message: "Restauracja dodana pomyślnie" });
+      if (error) throw error;
+
+      const { data } = supabase.storage.from("pictures").getPublicUrl(fileName);
+
+      const newRestaurant = new Restaurant({
+        name,
+        address,
+        description,
+        type,
+        hasDelivery: hasDelivery === "true",
+        image: data.publicUrl,
+      });
+      await newRestaurant.save();
+
+      res.status(201).json({ message: "Restauracja dodana pomyślnie" });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Błąd serwera" });
+      res.status(500).json({ message: "Błąd serwera" });
     }
-});
+  }
+);
+
 
 router.get("/restaurants", async (req, res) => {
     try {
@@ -214,7 +263,6 @@ router.get("/restaurants", async (req, res) => {
         const restaurants = await Restaurant.find(filter);
         res.status(200).json({ restaurants });
     } catch (err) {
-        console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
     }
 });
@@ -241,7 +289,6 @@ router.get("/restaurantReview/:id", async (req, res) => {
         );
         res.status(200).json({ data: resp });
     } catch (err) {
-        console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
     }
 });
@@ -277,7 +324,6 @@ router.get("/reviewsForChart", async (req, res) => {
         }
         res.status(200).json({message: response})
     } catch (err) {
-        console.error(err);
         res.status(500).json({ message: "Błąd serwera" });
     }
 });

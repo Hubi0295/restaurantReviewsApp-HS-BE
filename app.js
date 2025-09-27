@@ -5,7 +5,6 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const cors = require('cors');
 const app = express();
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(cors({
     origin: 'https://restaurant-reviews-app-hs.vercel.app',
     credentials: true
